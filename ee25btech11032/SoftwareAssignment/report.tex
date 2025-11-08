@@ -1,0 +1,614 @@
+\documentclass[journal]{IEEEtran}
+\usepackage[a5paper, margin=10mm, onecolumn]{geometry}
+\usepackage{tfrupee} 
+\setlength{\headheight}{1cm} 
+\setlength{\headsep}{0mm}     
+\usepackage{algpseudocode}
+\usepackage{gvv-book}
+\usepackage{gvv}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{txfonts}
+\usepackage{algorithm}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{mathtools}
+\usepackage{gensymb}
+%\usepackage{wasysym}
+\usepackage{comment}
+\usepackage[breaklinks=true]{hyperref}
+\usepackage{tkz-euclide} 
+\usepackage{listings}
+\def\inputGnumericTable{}                                 
+\usepackage[latin1]{inputenc}                                
+\usepackage{color}                                            
+\usepackage{array}                                            
+\usepackage{longtable}                                       
+\usepackage{calc}                                             
+\usepackage{multirow}                                         
+\usepackage{hhline}                                           
+\usepackage{ifthen}                                           
+\usepackage{lscape}
+%\usepackage{circuitikz}
+%\tikzstyle{block} = [rectangle, draw, fill=blue!20, 
+%    text width=4em, text centered, rounded corners, minimum height=3em]
+%\tikzstyle{sum} = [draw, fill=blue!10, circle, minimum size=1cm, node distance=1.5cm]
+%\tikzstyle{input} = [coordinate]
+%\tikzstyle{output} = [coordinate]
+%\renewcommand{\thefigure}{\theenumi}
+%\renewcommand{\thetable}{\theenumi}
+\setlength{\intextsep}{10pt} % Space between text and floats
+%\numberwithin{equation}{enumi}
+%\numberwithin{figure}{enumi}
+\renewcommand{\thetable}{\theenumi}
+
+
+\title{Image Compression Using Truncated SVD \\Matrix Theory (EE1030) }
+\author{Kartik Lahoti \\ EE25BTECH11032}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+
+\begin{abstract}
+This report details the implementation of an image compression algorithm using truncated Singular Value Decomposition (SVD) from scratch in C.The core algorithm leverages a hybrid approach: a Randomized SVD algorithm to reduce the dimensionality of the large image matrix, followed by a one-sided Jacobi SVD method to compute the singular values and vectors of the reduced matrix.This report presents how the algorithm is structured and provides the pseudo code to implement in C. The report also include why this algorithm is preferred over other and a caparison with implementing svd only with One-Sided-Jacobi. The report also provides error in the compressed image for different stages and provides an overview about the quality of image with compressions. 
+\end{abstract}
+
+\section{Summary of Gilbert Strang's video}
+
+Singular Value Decomposition is a powerful decomposition that can be applied on any matrix , irrespective of the fact that its square, fat or tall. 
+To make this possible we have to get two set of singular vectors, $\vec{u}$ and $\vec{v}$. The $\vec{u}$'s are the eigen-vectors of $\vec{A}\vec{A}^{\top}$ and the $\vec{v}$'s are the eigen-vectors of
+$\vec{A}^{\top}\vec{A}$. 
+
+Looking at the column and row space of a matrix $\vec{A}$ of order $m \times n$. Let this matrix have rank $r$. Thus both these spaces will have $r$ linearly independent vectors.
+
+Now we can say the A is diagonalized , 
+\begin{align}
+    \vec{A}\vec{v_1} &= \sigma_1\vec{u_1} \\ 
+    \vec{A}\vec{v_2} &= \sigma_2\vec{u_2} \\
+    &\vdots\\
+    \vec{A}\vec{v_r} &= \sigma_r\vec{u_r}  
+\end{align}
+
+This can be rewritten as
+
+\begin{align}
+    \vec{A}\myvec{\vec{v_1} & \vec{v_2} & \dots \vec{v_r}} = \myvec{\vec{u_1} & \vec{u_2} & \dots \vec{u_r}}\myvec{\sigma_1 & & & \\ & \sigma_2 & & \\ & & \ddots & \\ & & & \sigma_r }
+\end{align}
+
+\begin{align}
+    \vec{A}\vec{V} = \vec{U}\vec{\Sigma}
+\end{align}
+
+Since $\vec{V}$ and $\vec{U}$ are orthogonal i.e. $\vec{V}^{\top}\vec{V} = \vec{I}$ and $\vec{U}^{\top}\vec{U} = \vec{I}$  , we can write 
+
+\begin{align}
+    \vec{A} = \vec{U}\vec{\Sigma}\vec{V}^{\top}
+\end{align}
+
+Here, $\vec{U}$ and $\vec{V}^{\top}$ have left and right singular vectors respectively. The $\vec{\Sigma}$ has the singular values of matrix $\vec{A}$.
+
+Look at Matrix $\vec{A}^{\top}\vec{A}$
+
+\begin{align}
+    \vec{A}^{\top}\vec{A} = \vec{V}\vec{\Sigma}^{\top}\vec{U}^{\top}\vec{U}\vec{\Sigma}\vec{V}^{\top}
+\end{align}
+\begin{align}
+    \vec{A}^{\top}\vec{A} = \vec{V}\vec{\Lambda}\vec{V}^{\top}     
+\end{align}
+
+where $\vec{\Sigma}^2 = \vec{\Lambda}$
+
+This matrix $\vec{A}^{\top}\vec{A}$ have special properties like positive semi-definite and symmetric. 
+Again we look at 
+\begin{align}
+    \vec{A}\vec{A}^{\top} = \vec{U}\vec{\Sigma}\vec{V}^{\top}\vec{V}\vec{\Sigma}^{\top}\vec{U}^{\top}
+\end{align}
+\begin{align}
+    \vec{A}^{\top}\vec{A} = \vec{U}\vec{\Lambda}\vec{U}^{\top}     
+\end{align}
+
+Since we can perform eigen value decomposition of these two matrices that are $\vec{A}^{\top}\vec{A}$ 
+and $\vec{A}\vec{A}^{\top}$ , we can obtain the matrices $\vec{U}$ , $\vec{V}$ and $\vec{\Lambda}$. 
+
+This way we can obtain all the matrices $\vec{U}$ , $\vec{\Sigma}$ and $\vec{V}$.
+
+\section{Introduction}
+A grayscale image can be represented as a real-valued matrix $\vec{A} \in \mathbb{R}^{m \times n}$, where each entry $\brak{i, j}$ corresponds to a pixel's intensity. The Singular Value Decomposition (SVD) is a fundamental matrix factorization that decomposes $\vec{A}$ into three other matrices:
+\begin{align}
+    \vec{A} = \vec{U} \vec{\Sigma} \vec{V}^{\top}
+\end{align}
+
+where $\vec{U} \in \mathbb{R}^{m \times m}$ and $\vec{V} \in \mathbb{R}^{n \times n}$ are orthogonal matrices, and $\vec{\Sigma} \in \mathbb{R}^{m \times n}$ is a diagonal matrix containing the singular values $\sigma_1 \ge \sigma_2 \ge \dots \ge 0$.
+
+The SVD provides the best low-rank approximation of a matrix. By keeping only the top $k$ singular values and their corresponding vectors, we can construct a compressed approximation $A_k$:
+\begin{align}
+    \vec{A_k} = \vec{U_k} \vec{\Sigma_k} \vec{V_k}^{\top}
+\end{align}
+where $U_k$ is $m \times k$, $\Sigma_k$ is $k \times k$, and $V_k$ is $n \times k$. This approximation requires storing only $\brak{m \times k} + k + \brak{n \times k}$ values, which is far less than $m \times n$ for small $k$, forming the basis of SVD-based image compression.
+
+\section{Algorithm Implementation}
+Computing the full SVD of a large image matrix is computationally expensive. To optimize this, we implemented a two-stage algorithm. First, we use a Randomized SVD (rSVD) technique to find a low-dimensional subspace that captures the "action" of the matrix. Second, we apply the accurate but more intensive Jacobi SVD algorithm to this much smaller matrix.
+
+\subsection{Randomized SVD (rSVD)}
+
+Since the matries that we have to operate on are becoming of higher and higher dimension (ex. video being shot presently might be in 4k but a year ago there was HD) and applying SVD on this huge data becomes difficult. rSVD is one such method evolved to faster our calculations.
+Even if a matrix has a  very huge dimension , it may still have a low intrinsic rank (i.e. lesser numbr of very features). 
+
+The core idea of rSVD is , we have a matrix $\vec{A}$ , we will randomly sample the column space of this matrix (project the $n$-dimensional column space of $\vec{A}$ onto a much smaller $(k+p)$-dimensional subspace, where $k$ is the target rank and $p$ is a small oversampling parameter (e.g., $p=10$ , this $p$ value is generally suggested).
+
+\subsubsection{Mathematical Formulation}
+\begin{enumerate}
+    \item \textbf{Step 1:} We generate a random Gaussian matrix $\vec{P} \in \mathbb{R}^{n \times r}$, where $r = k+p$. We then form a "sketch"(project) matrix $Z \in \mathbb{R}^{m \times r}$ by computing:
+\begin{align}
+    \vec{Z} = \vec{A} \vec{P}
+\end{align}
+    The matrix $\vec{Z}$ and $\vec{A}$ will have same dominant column space if $\vec{P}$ is a proper random matrix.
+
+    \item \textbf{Step 2 Orthogonalization : } We find an orthogonal basis for the column space of $\vec{Z}$. This is done by computing a $\vec{Q}\vec{R}$ decomposition of $\vec{Z}$:
+    \begin{align}
+        \vec{Z} = \vec{Q}\vec{R}
+    \end{align}
+    where $\vec{Q} \in \mathbb{R}^{m \times r}$ has orthogonal columns. 
+
+    To perform this QR decompositon we used Householder QR. 
+
+    \item\textbf{Working of Householder QR : }\\
+
+    We carefully find householder reflections one by one , i.e. 
+    \begin{align}
+        \vec{H_i} = \vec{I} - \frac{2}{\vec{v}^{\top}\vec{v}}\vec{v}\vec{v}^t 
+    \end{align}
+    where $\vec{H_i}$ is both Symmetric and Orthogonal.
+    \begin{align}
+        \vec{H}\vec{x} = \alpha\vec{e_1}
+    \end{align}
+    where $\alpha = \pm\norm{\vec{x}}$ , and sign is chosen such that first terms doesn't cancel out.
+    
+    Substituing $\vec{H}$ and rearranging $\vec{v}$ we get, 
+
+    \begin{align}
+        {\vec{v}} = \vec{x} - \alpha\vec{e_1} 
+    \end{align}
+
+    Now,for a Matrix $\vec{A}$ with n columns  we start with multiplying $\vec{H_i}$ from $i = 0$ to $n$.
+
+    First Multiplication 
+    \begin{align}
+        \vec{A'} = \vec{H_1}\vec{A}
+    \end{align}
+    where , $\vec{A'}$ has all element below $a_{11}$ as zero.
+    \begin{align}
+        \vec{A''} = \vec{H_2}\vec{A'}
+    \end{align}
+    where , $\vec{A''}$ has all element below $a_{22}$ as zero and so on till.
+    \begin{align}
+        \vec{A^{n_{th}}} = \vec{H_n}\dots\vec{H_2}\vec{H_1}\vec{A}
+    \end{align}
+    where $\vec{A^{n_{th}}} = \vec{R} \text{\brak{say}}$ becomes upper triangular matrix. 
+    \begin{align}
+        \vec{A} = \vec{H_1}\vec{H_2}\dots\vec{H_n}\vec{R}
+    \end{align}
+    We achived the QR Decompostion where $\vec{Q} = \vec{H_1}\vec{H_2}\dots\vec{H_n}$\\
+    
+    \item \textbf{Reason For Choosing This QR Algo:} \\
+    Householder QR is much more stable than Classical Gram-Schmidt (CGS).\\
+    It avoids catastrophic cancellation because it never directly subtracts nearly collinear vectors.\\
+    It achieves stability close to machine precision - nearly as good as performing a full orthogonalization.\\
+ 
+    \item \textbf{Projection:} We project the original matrix $\vec{A}$ onto this new, smaller basis $\vec{Q}$:
+    \begin{align}
+        \vec{B} = \vec{Q}^{\top}\vec{A}
+    \end{align}
+    The resulting matrix $\vec{B} \in \mathbb{R}^{r \times n}$ is much smaller than $\vec{A}$ (since $r \ll m$). The key insight is that the SVD of $\vec{B}$ is closely related to the SVD of $\vec{A}$.
+\end{enumerate}
+
+\subsection{Pseudocode for rSVD}
+\begin{algorithmic}[1]
+
+\Function{randomized\_svd}{$A, m, n, k , U_k , vec_k , V_k$}
+    \State Matrix $A$ order $m \times n$, target rank $k$
+    \State $A_k = U_k \, \text{diag}\brak{vec_k}\, \brak{V_k}^{\top}$ 
+    \State $p$ \Comment{oversampling parameter}
+    \State $r \gets k + p$ \Comment{$r$ is effective rank}
+    \State $P \gets \text{RandomMatrix}\brak{n, r}$ \Comment{Generate $n \times r$ random matrix} 
+    \State $Z \gets \text{MatrixMultiply}\brak{A, P, m, n, r}$
+    \State $Q \gets I_{m \times m}$ \Comment{Identity matrix}
+    \State $Q \gets \text{HouseholderQR}\brak{Z, m, r}$
+    
+    \While{$\text{temp}$}
+        \If{$i < r$ \textbf{and} $i < m$}
+            \State $len \gets m - i$
+            \State $v \gets \text{i-th column of } Z$
+            \State $norm \gets \|v\|$
+            \State $Q \gets \text{HouseholderReflector}\brak{v, Z, Q, r, i, norm}$
+            \State $R \gets \text{HouseholderReflector}\brak{v, Z, Q, r, i, norm}$
+        \EndIf
+        \State $temp \gets 0$
+    \EndWhile
+      
+    \State $A^{\top} \gets \text{Transpose}\brak{A, m, n}$
+    \State $Q^{\top} \gets \text{Transpose}\brak{Q, m, r}$ 
+    \State $B \gets \text{MatrixMultiply}\brak{Q^{\top}, A, r, m, n}$ \Comment{Code uses $B = Q^A$}
+    \State $V \gets I_{n \times n}$ \Comment{Identity matrix}
+    \State \Comment{Now compute SVD of the smaller matrix $B$}
+    \State $\brak{U_B, \Sigma, V} \gets \text{JacobiSVD}\brak{B, r, n}$
+    \State \Comment{Reconstruct final $U$}
+    \State $U \gets \text{MatrixMultiply}(Q, U_B, m, r, r)$ 
+    \State $U_k \gets U$ \Comment{Gets first $k$ columns from $U$}
+    \State $vec_k \gets \Sigma$
+    \State $V_k \gets V$
+    \State \Return $(U_k, vec_k, V_k)$ \Comment{Full SVD components}
+\EndFunction
+
+\end{algorithmic}
+
+\subsection{One-Sided Jacobi SVD}
+After reducing the problem to the smaller matrix $\vec{B}$, we compute its SVD using a one-sided Jacobi algorithm. This method iteratively applies Jacobi (Givens) rotations to the columns of $\vec{B}$ to make them orthogonal. It implicitly diagonalizes $\vec{B}^{\top}\vec{B}$ without ever forming it, which improves numerical stability.
+
+\subsubsection{Mathematical Formulation}
+\begin{enumerate}
+    \item \textbf{Goal:} We want to find an orthogonal $\vec{V}$ such that the columns of $\vec{B'} = \vec{B}\vec{V}$ are orthogonal. If $\vec{B'} = \vec{U}\vec{\Sigma}$, then $\vec{B} = \vec{U}\vec{\Sigma}\vec{V}^{\top}$ is the SVD.
+    
+    \item \textbf{Iteration:} The algorithm proceeds in "sweeps." In each sweep, we iterate over all pairs of columns $(p, q)$ of $B$ . We find the pairs that are not Orthogonal or close to Orthogonal and apply Jacobi Rotation to those column pairs.
+
+    \item \textbf{Jacobi Rotation:} For a pair $(p, q)$, we want to find a rotation angle $\theta$ to make columns $p$ and $q$ orthogonal. We compute the inner products of the columns:
+    \begin{align}
+        n_{pp} &= \vec{B_p}^{\top} \vec{B_p} \\
+        n_{qq} &= \vec{B_q}^{\top} \vec{B_q} \\
+        n_{pq} &= \vec{B_p}^{\top} \vec{B_q}
+    \end{align}
+    If $n_{pq}$ is not close to zero, we compute the cosine ($c$) and sine ($s$) of a rotation angle $\theta$ that will zero out the $(p,q)$ entry of the $B^T B$ matrix. These $c$ and $s$ form the Jacobian Rotation Matrix.
+    \begin{align}
+        \vec{J}\brak{\theta} = \myvec{c&-s \\ s & c} 
+    \end{align}
+
+    $\theta$ is found from the relation
+
+    \begin{align}
+        \frac{1}{\tan{2\theta}} = \frac{n_{qq} - n_{pp}}{2n_{pq}}
+    \end{align}
+    
+    
+    \item \textbf{Making Columns Orthogonal:} The rotation is applied to the columns $p$ and $q$ of $\vec{B}$:
+    \begin{align}
+    \myvec {\vec{B'_p} & \vec{B'_q}} = \myvec{ \vec{B_p} & \vec{B_q}}
+    \myvec{c&-s \\ s & c} 
+    \end{align}
+    We also accumulate this rotation in our $\vec{V}$ matrix, which is initialized to $\vec{I}$:
+    \begin{align} 
+    \myvec{ \vec{V'_p} & \vec{V'_q}} = \myvec{ \vec{V_p} & \vec{V_q}} 
+    \myvec{c&-s \\ s & c} 
+    \end{align}
+    
+    \item \textbf{Convergence:} We repeat these sweeps until all $n_{pq}$ are below a small tolerance, meaning all columns of $B$ are orthogonal.
+
+    \item \textbf{Final SVD:} Once converged, the singular values $\sigma_j$ are the Euclidean norms of the columns of the final matrix $\vec{B'}$. The left singular vectors $\vec{U_B}$ are the normalized columns of $\vec{B'}$. The right singular vectors $\vec{V}$ are the accumulated rotations.
+\end{enumerate}
+
+\subsubsection{Pseudocode for Jacobi SVD}
+\begin{algorithmic}[1]
+\Function{JacobiSVD}{$B, r, n$}
+    \State $V \gets \text{IdentityMatrix}\brak{n, n}$
+    \State $U \gets \text{Matrix}\brak{r, n}$
+    \State $\Sigma \gets \text{Vector}\brak{n}$
+    \State $\text{converged} \gets \text{false}$
+    \While{\text{not converged and sweeps} $<$ MAX\_SWEEPS}
+        \State $\text{converged} \gets \text{true}$
+        \For{$p \gets 0$ to $n-2$}
+            \For{$q \gets p+1$ to $n-1$}
+                \State $n_{pp} \gets \text{Dot}(B_p, B_p)$
+                \State $n_{qq} \gets \text{Dot}(B_q, B_q)$
+                \State $n_{pq} \gets \text{Dot}(B_p, B_q)$
+                \If{$|n_{pq}| > \text{TOLERANCE}$}
+                    \State $\text{converged} \gets \text{false}$
+                    \State $c, s \gets \text{CalculateRotation}(n_{pp}, n_{qq}, n_{pq})$
+                    \State $\text{ApplyRotation}\brak{B, c, s, p, q}$
+                    \State $\text{ApplyRotation}\brak{V, c, s, p, q}$
+                \EndIf
+            \EndFor
+        \EndFor
+    \EndWhile
+    \State \Comment{Extract U and Sigma}
+    \For{$j \gets 0$ to $n-1$}
+        \State $\sigma_j \gets \text{Norm}(B_j)$
+        \State $U_{j} \gets B_j / \sigma_j$
+    \EndFor
+    \State $\text{SortSVD}(U, \Sigma, V)$ \Comment{Sorting Singular values}
+    \State \Return $U, \Sigma, V$
+\EndFunction
+\end{algorithmic}
+
+\section{Results and Analysis}
+
+The following are the Images Generated by the program in comparision to original.
+
+\subsection{Einstein Image}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/einstein.jpg}
+    \caption{Original Image - 6kB}
+    \label{fig:org}
+\end{figure}
+
+The following figures show the reconstructed images for different values of $k$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/e_k5.jpg}
+    \caption{$k=5$}
+    \label{fig:e_k5}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/e_k20.jpg}
+    \caption{$k=20$}
+    \label{fig:e_k20}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/e_k50.jpg}
+    \caption{$k=50$}
+    \label{fig:e_k50}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/e_k100.jpg}
+    \caption{$k=100$}
+    \label{fig:e_k100}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{tables/table1}
+    \caption{Einstein Image Comparison}
+\end{table}
+
+\subsection{Globe Image}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/globe.jpg}
+    \caption{Original Image - 146.6kB}
+    \label{fig:org}
+\end{figure}
+
+The following figures show the reconstructed images for different values of $k$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/g_k5.jpg}
+    \caption{$k=5$}
+    \label{fig:e_k5}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/g_k20.jpg}
+    \caption{$k=20$}
+    \label{fig:e_k20}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/g_k50.jpg}
+    \caption{$k=50$}
+    \label{fig:e_k50}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/g_k100.jpg}
+    \caption{$k=100$}
+    \label{fig:e_k100}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{tables/table2}
+    \caption{Globe Image}
+\end{table}
+
+\subsection{Grey Scale Image}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/greyscale.png}
+    \caption{Original Image - 926kB}
+    \label{fig:org}
+\end{figure}
+
+The following figures show the reconstructed images for different values of $k$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/gs_k5.png}
+    \caption{$k=5$}
+    \label{fig:e_k5}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/gs_k20.png}
+    \caption{$k=20$}
+    \label{fig:e_k20}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/gs_k50.png}
+    \caption{$k=50$}
+    \label{fig:e_k50}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/gs_k100.png}
+    \caption{$k=100$}
+    \label{fig:e_k100}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{tables/table3}
+    \caption{Grey Scale Image}
+\end{table}
+
+\subsection{Globe Image}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/color.jpg}
+    \caption{Original Image - 18.9kB}
+    \label{fig:org}
+\end{figure}
+
+The following figures show the reconstructed images for different values of $k$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/col_k5.jpg}
+    \caption{$k=5$}
+    \label{fig:e_k5}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/col_k20.jpg}
+    \caption{$k=20$}
+    \label{fig:e_k20}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/col_k50.jpg}
+    \caption{$k=50$}
+    \label{fig:e_k50}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/col_k100.jpg}
+    \caption{$k=100$}
+    \label{fig:e_k100}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{tables/table4}
+    \caption{Coloured Image }
+\end{table}
+
+\subsection{Einstein Image - Using Only One Side Jacobi Algorithm }
+
+The following figures show the reconstructed images for different values of $k$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/OneSvd_e_k5.jpg}
+    \caption{$k=5$}
+    \label{fig:e_k5}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/OneSvd_e_k20.jpg}
+    \caption{$k=20$}
+    \label{fig:e_k20}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/OneSvd_e_k50.jpg}
+    \caption{$k=50$}
+    \label{fig:e_k50}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/OneSvd_e_k100.jpg}
+    \caption{$k=100$}
+    \label{fig:e_k100}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{tables/table5}
+    \caption{Only Jacobi}
+\end{table}
+
+\subsection{Coloured Image To Grey Scale}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.25\columnwidth]{figs/color_gsk100.jpg}
+    \caption{$k=100$}
+    \label{fig:col_gs100}
+\end{figure}
+
+\subsection{Error Analysis}
+To quantify the compression quality, we compute the Frobenius norm of the error matrix, $\norm{A - A_k}_F$. The Frobenius norm is the square root of the sum of the squares of all elements in the matrix.
+
+The results for different values of $k$ are compiled in Tables above.
+
+As expected, the Frobenius error decreases as $k$ increases, corresponding to the increase in visual quality. This can we seen only with the Randomized SVD , but when the image compression was perform using only One Sided Jacobi , the Frobenius value did not decrease.
+
+\section{Choice of Algorithm}
+
+For this project , the \textbf{Randomized Singular Value Decomposition (rSVD)} followed by a \textbf{one-sided Jacobi refinement} has been chosen over other algorithms since it offers an excellent trade-off between computational efficiency, numerical stability, and accuracy.
+
+\subsubsection{Big-O Summary}
+
+\begin{align}
+    \text{Random Projection} \vec{A}\vec{P}  &: \mathcal{O}(mn(k+p)) \\
+    \text{QR Decomposition} &: \mathcal{O}(m(k+p)^2) \\
+    \text{Small Svd } \vec{B} = \vec{Q}^{\top}\vec{A}  &: \mathcal{O}((k+p)^2n) \\
+    \text{Orthogonalization }  &: \mathcal{O}(k^2n) 
+\end{align}
+
+\begin{align}
+    \textbf{TOTAL} &: \mathcal{O}(mn(k+p))
+\end{align}
+
+In comparison to using only One-Sided-Jacobi, this algorithm is better. This can be seen from the Frobenius values calculated for this algo. The values are pretty large and do not decrease with increase in $k$.
+
+In comparison to the Power Iteration Algorithm , the convergence achived by rSVD is much faster.It significantly reduces computational complexity when dealing with dense large matrix.
+
+\section{Discussion and Trade-offs}
+The core trade-off in SVD compression is between compression size and image quality.
+
+\begin{itemize}
+    \item \textbf{Storage:} The storage required for $\vec{A_k}$ is given by $(m \times k) + k + (n \times k)$ floating-point numbers. As $k$ increases, the storage cost increases linearly.Thus
+    as $k$ increase quality of image becomes better since more pixel data is store.
+    
+    \item \textbf{Quality:} As $k$ increases, $\vec{A_k}$ becomes a more accurate approximation of $\vec{A}$, results in better quality image and a lower Frobenius error.
+    
+    \item \textbf{Choosing k value :} A very small $k$ (e.g., $k=5$) results in a very high compression ratio but a blurry, blocky image that only captures the broadest structures.Not all the key columns that are required to display the image are not taken into consideration thus it looks blurry. A large $k$ (e.g., $k=100$) retains significant detail but offers less compression. The "optimal" $k$ depends on the application---a value that is small enough to provide meaningful compression but large enough to preserve the essential features of the image. The values $k=20$ to $k=50$ seem to provide a good balance for the test images.
+\end{itemize}
+
+\section{Conclusion}
+This project successfully implemented a full C-based image compression program using truncated SVD. A modern hybrid algorithm combining Randomized SVD for dimensionality reduction and Jacobi SVD for accurate factorization was developed. The results confirm the theoretical trade-off between the approximation of rank $k$, storage requirements, and image quality.
+
+\section{References}
+
+\begin{enumerate}
+    \item https://youtu.be/fJ2EyvR85ro?si=o52TtthFeItDBYNu
+    \item https://youtu.be/VUktLhUiR7w?si=ZZJrfHYqI1G0IG61
+    \item https://youtu.be/6TIVIw4B5VA?si=1G8KXnmhnZLFvnnl - and the following parts. 
+\end{enumerate}
+
+
+
+
+
+\end{document}
